@@ -1,106 +1,82 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
+using T3;
 
 namespace T3
+
 {
+    public class ConsoleOrderObserver : IOrderObserver
+    {
+        public void Update(OrderEvent orderEvent)
+        {
+            Console.WriteLine($"[EVENTO] Pedido {orderEvent.OrderId}: {orderEvent.FromState} → {orderEvent.ToState} ({orderEvent.Timestamp})");
+        }
+    }
     class Program
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("=== SISTEMA LOGIPACK S.A.C. ===\n");
+            var order = new Order { OrderId = "P-001", State = "Creado" };
+            var observer = new ConsoleOrderObserver();
+            order.Attach(observer);
 
-            
-            Console.WriteLine("→ DEMOSTRANDO PATRÓN OBSERVER\n");
 
-            var order = new Order { OrderId = "PED-001", State = "Creado" };
+            Console.WriteLine("=== Sistema de Gestión de Pedidos ===");
+            Console.WriteLine($"Pedido {order.OrderId} creado con estado inicial: {order.State}");
 
-            order.Attach(new ClientNotifier());
-            order.Attach(new ProviderNotifier());
-            order.Attach(new DashboardNotifier());
-
-            order.ChangeState("Validado");
-            Console.ReadLine();
-
-            order.ChangeState("En Ruta");
-            Console.ReadLine();
-
-            order.ChangeState("Entregado");
-            Console.ReadLine();
-
-            Console.WriteLine("\n PATRÓN ADAPTER\n");
-
-            var factory = new ShippingProviderFactory();
-
-            var providers = new List<IShippingProvider>
+            while (true)
             {
-                factory.GetProvider("RappiEnvios"),
-                factory.GetProvider("OlvaCourier")
-            };
-
-            foreach (var provider in providers)
-            {
-                var pickup = provider.RequestPickup(new PickupRequest
+                string nextState = GetNextState(order.State);
+                if (string.IsNullOrEmpty(nextState))
                 {
-                    OrderId = order.OrderId,
-                    PickupAddress = "Almacén N2",
-                    DeliveryAddress = "Av. Los Olivos 456",
-                    Weight = 4.75
-                });
+                    Console.WriteLine("No hay más transiciones posibles. Fin del proceso.");
+                    break;
+                }
+                Console.WriteLine($"\nEstado actual: {order.State}");
+                Console.WriteLine($"Seleccione el siguiente estado válido: {nextState}");
+                Console.Write("Ingrese su elección: ");
+                string input = Console.ReadLine();
+                if (input.Equals("Salir", StringComparison.OrdinalIgnoreCase))
+                    break;
+                if (!IsValidTransition(order.State, input))
+                {
+                    Console.WriteLine(" Intente nuevamente.");
+                    continue;
+                }
+                order.ChangeState(input);
 
-                Console.WriteLine(pickup);
+                if (input == "Entregado" || input == "Cancelado")
+                {
+                    Console.WriteLine("Proceso finalizado.");
+                    break;
+                }
             }
-
-            Console.ReadLine();
-
-            Console.WriteLine("\n PATRÓN BUILDER\n");
-
-            var builder = new DeliveryRouteBuilder();
-            var director = new DeliveryRouteDirector();
-
-            var route = director.CreateStandardRoute(builder);
-            Console.WriteLine($"Ruta generada: {route.RouteId}");
-
-            route.Stages.Add("Almacén N1");
-            route.Stages.Add("Almacén N3");
-            route.DocumentType = "Carnet de Extranjería";
-            route.TransportType = "Motocicleta";
-
-            Console.WriteLine("\nDetalles de la ruta:");
-            Console.WriteLine($"- ID: {route.RouteId}");
-            Console.WriteLine($"- Documentación: {route.DocumentType}");
-            Console.WriteLine($"- Transporte asignado: {route.TransportType}");
-            Console.WriteLine($"- Etapas:");
-
-            foreach (var stage in route.Stages)
-                Console.WriteLine($"  * {stage}");
-
-            Console.ReadLine();
-
-            Console.WriteLine("\nFin de la demostración. Presiona ENTER para salir.");
-            Console.ReadLine();
+            Console.WriteLine("\nPresione cualquier tecla para salir...");
+            Console.ReadKey();
         }
-    }
-    public class ProviderNotifier : IOrderObserver
-    {
-        public void Update(OrderEvent orderEvent)
+        static string GetNextState(string currentState)
         {
-            Console.WriteLine($"[Proveedor] Pedido {orderEvent.OrderId} ahora está {orderEvent.ToState}");
+            return currentState switch
+            {
+                "Creado" => "Validado / Cancelado",
+                "Validado" => "En Almacén / Cancelado",
+                "En Almacén" => "Despachado / Cancelado",
+                "Despachado" => "En Ruta",
+                "En Ruta" => "Entregado / Cancelado",
+                _ => ""
+            };
         }
-    }
+        static bool IsValidTransition(string current, string next)
 
-    public class ClientNotifier : IOrderObserver
-    {
-        public void Update(OrderEvent orderEvent)
         {
-            Console.WriteLine($"[Cliente] Pedido {orderEvent.OrderId} cambió a {orderEvent.ToState}");
-        }
-    }
-
-    public class DashboardNotifier : IOrderObserver
-    {
-        public void Update(OrderEvent orderEvent)
-        {
-            Console.WriteLine($"[Dashboard] Estado actualizado: {orderEvent.ToState}");
+            switch (current)
+            {
+                case "Creado": return next == "Validado" || next == "Cancelado";
+                case "Validado": return next == "En Almacén" || next == "Cancelado";
+                case "En Almacén": return next == "Despachado" || next == "Cancelado";
+                case "Despachado": return next == "En Ruta";
+                case "En Ruta": return next == "Entregado" || next == "Cancelado";
+                default: return false;
+            }
         }
     }
 }
